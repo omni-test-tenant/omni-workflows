@@ -1,0 +1,17 @@
+name: automated-bug-repro
+version: 1.0.0
+description: Zatch autonomous SDLC reproduction pipeline for multi-store checkout failures
+triggers:
+  - event: linear.issueCreated
+    filter: "label:omni-bug"
+steps:
+  - id: provision-5store-sandbox
+    action: customer-data.provisionCompositeTenantEmulation
+  - id: replay-checkout-trace
+    action: customer-data.replayScenario
+  - id: generate-fix-branch
+    action: git.createBranch
+  - id: run-tdd-cycle
+    action: test.execute
+  - id: open-pull-request
+    action: github.createPullRequest

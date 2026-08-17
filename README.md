@@ -1,2 +1,2 @@
-# omni-workflows
-Zatch retail workflow definitions and execution actions
+# OmniCommerce Zatch Workflows
+Enterprise AI workflows for OmniCommerce retail operations.

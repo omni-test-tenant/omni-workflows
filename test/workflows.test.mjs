@@ -4,13 +4,15 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Client as PgClient } from "pg";
 import { MongoClient } from "mongodb";
+import { Kafka } from "kafkajs";
 import { OmniWorkflowRunner } from "../src/omni-runner.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("OmniWorkflowRunner parses and executes order-settlement workflow against live database drivers", async () => {
+test("OmniWorkflowRunner executes order-settlement workflow against live 4-engine cluster", async () => {
   const pgUrl = process.env.CDW_TEST_POSTGRES_URL || "postgresql://postgres:cdw-ci-disposable-only@127.0.0.1:5432/postgres";
   const mongoUrl = process.env.CDW_TEST_MONGO_URL || "mongodb://127.0.0.1:27017/omnicommerce_workflows";
+  const kafkaBrokers = (process.env.CDW_TEST_KAFKA_BROKERS || "127.0.0.1:9092").split(",");
 
   const pg = new PgClient({ connectionString: pgUrl, connectionTimeoutMillis: 2000 });
   await pg.connect();
@@ -32,16 +34,24 @@ test("OmniWorkflowRunner parses and executes order-settlement workflow against l
     priceCents: 14999
   });
 
-  const kafkaMock = {
-    send: async () => {}
-  };
+  const kafka = new Kafka({ clientId: `workflows-test-${Date.now()}`, brokers: kafkaBrokers, retry: { retries: 5 } });
+  const admin = kafka.admin();
+  await admin.connect();
+  await admin.createTopics({
+    topics: [{ topic: "omnicommerce.payment-cdc", numPartitions: 1, replicationFactor: 1 }],
+    waitForLeaders: true
+  }).catch(() => {});
+  await admin.disconnect();
+
+  const producer = kafka.producer({ retry: { retries: 5 } });
+  await producer.connect();
 
   try {
     const runner = new OmniWorkflowRunner({
       stores: {
         mongodb: mongoDb,
         postgres: pg,
-        kafka: kafkaMock
+        kafka: producer
       }
     });
 
@@ -67,6 +77,7 @@ test("OmniWorkflowRunner parses and executes order-settlement workflow against l
     await pg.end().catch(() => {});
     await mongoDb.collection("product_catalogs").drop().catch(() => {});
     await mongo.close().catch(() => {});
+    await producer.disconnect().catch(() => {});
   }
 });
 

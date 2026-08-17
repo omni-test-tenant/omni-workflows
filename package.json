@@ -2,7 +2,11 @@
   "name": "@omni-test-tenant/omni-workflows",
   "version": "1.0.0",
   "type": "module",
+  "main": "src/index.mjs",
   "scripts": {
     "test": "node --test test/**/*.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
   }
 }

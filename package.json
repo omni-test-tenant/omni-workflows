@@ -2,7 +2,16 @@
   "name": "@omni-test-tenant/omni-workflows",
   "version": "1.0.0",
   "type": "module",
+  "main": "src/index.mjs",
   "scripts": {
     "test": "node --test test/**/*.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "kafkajs": "^2.2.4",
+    "mongodb": "^6.12.0",
+    "pg": "^8.13.1"
   }
 }

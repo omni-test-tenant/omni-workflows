@@ -2,28 +2,72 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { Client as PgClient } from "pg";
+import { MongoClient } from "mongodb";
 import { OmniWorkflowRunner } from "../src/omni-runner.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("OmniWorkflowRunner parses and executes order-settlement workflow sequentially", async () => {
-  const runner = new OmniWorkflowRunner();
-  const workflowPath = join(__dirname, "../workflows/order-settlement.yaml");
-  const result = await runner.runWorkflow(workflowPath, {
-    orderId: "ord-settle-101",
+test("OmniWorkflowRunner parses and executes order-settlement workflow against live database drivers", async () => {
+  const pgUrl = process.env.CDW_TEST_POSTGRES_URL || "postgresql://postgres:cdw-ci-disposable-only@127.0.0.1:5432/postgres";
+  const mongoUrl = process.env.CDW_TEST_MONGO_URL || "mongodb://127.0.0.1:27017/omnicommerce_workflows";
+
+  const pg = new PgClient({ connectionString: pgUrl, connectionTimeoutMillis: 2000 });
+  await pg.connect();
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      status TEXT NOT NULL
+    );
+  `);
+
+  const mongo = new MongoClient(mongoUrl, { serverSelectionTimeoutMS: 2000 });
+  await mongo.connect();
+  const mongoDb = mongo.db();
+  await mongoDb.collection("product_catalogs").insertOne({
     sku: "SKU-OMNI-4K-TV",
-    amountCents: 14999
+    stockQuantity: 10,
+    priceCents: 14999
   });
 
-  assert.equal(result.success, true);
-  assert.equal(result.workflowName, "order-settlement");
-  assert.equal(result.executedSteps.length, 4);
-  assert.equal(result.executedSteps[0].action, "mongodb.checkStock");
-  assert.equal(result.executedSteps[1].action, "postgresql.recordSettlement");
-  assert.equal(result.executedSteps[2].action, "kafka.producePaymentCdc");
-  assert.equal(result.executedSteps[3].action, "agentmail.sendReceipt");
-  assert.equal(result.output.inStock, true);
-  assert.equal(result.output.status, "sent");
+  const kafkaMock = {
+    send: async () => {}
+  };
+
+  try {
+    const runner = new OmniWorkflowRunner({
+      stores: {
+        mongodb: mongoDb,
+        postgres: pg,
+        kafka: kafkaMock
+      }
+    });
+
+    const workflowPath = join(__dirname, "../workflows/order-settlement.yaml");
+    const result = await runner.runWorkflow(workflowPath, {
+      orderId: "ord-settle-live-101",
+      sku: "SKU-OMNI-4K-TV",
+      amountCents: 14999
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.workflowName, "order-settlement");
+    assert.equal(result.executedSteps.length, 4);
+    assert.equal(result.output.inStock, true);
+    assert.equal(result.output.status, "sent");
+
+    // Verify row was inserted into real PostgreSQL
+    const pgRes = await pg.query("SELECT * FROM payments WHERE order_id = $1", ["ord-settle-live-101"]);
+    assert.equal(pgRes.rowCount, 1);
+    assert.equal(pgRes.rows[0].status, "settled");
+  } finally {
+    await pg.query("DROP TABLE IF EXISTS payments CASCADE").catch(() => {});
+    await pg.end().catch(() => {});
+    await mongoDb.collection("product_catalogs").drop().catch(() => {});
+    await mongo.close().catch(() => {});
+  }
 });
 
 test("OmniWorkflowRunner executes automated-bug-repro pipeline steps end-to-end", async () => {

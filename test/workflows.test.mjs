@@ -66,7 +66,7 @@ test("OmniWorkflowRunner executes order-settlement workflow against live 4-engin
     assert.equal(result.workflowName, "order-settlement");
     assert.equal(result.executedSteps.length, 4);
     assert.equal(result.output.inStock, true);
-    assert.equal(result.output.status, "sent");
+    assert.equal(result.output.status, "dispatched");
 
     // Verify row was inserted into real PostgreSQL
     const pgRes = await pg.query("SELECT * FROM payments WHERE order_id = $1", ["ord-settle-live-101"]);

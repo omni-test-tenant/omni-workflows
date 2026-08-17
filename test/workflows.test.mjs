@@ -6,7 +6,7 @@ import { OmniWorkflowRunner } from "../src/omni-runner.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-test("OmniWorkflowRunner executes order-settlement workflow sequentially with built-in handlers", async () => {
+test("OmniWorkflowRunner parses and executes order-settlement workflow sequentially", async () => {
   const runner = new OmniWorkflowRunner();
   const workflowPath = join(__dirname, "../workflows/order-settlement.yaml");
   const result = await runner.runWorkflow(workflowPath, {
@@ -26,10 +26,14 @@ test("OmniWorkflowRunner executes order-settlement workflow sequentially with bu
   assert.equal(result.output.status, "sent");
 });
 
-test("OmniWorkflowRunner executes automated-bug-repro pipeline end-to-end with zero mocks", async () => {
+test("OmniWorkflowRunner executes automated-bug-repro pipeline steps end-to-end", async () => {
   const runner = new OmniWorkflowRunner();
   const workflowPath = join(__dirname, "../workflows/automated-bug-repro.yaml");
-  const result = await runner.runWorkflow(workflowPath, { issueId: "ROCK-999" });
+  const result = await runner.runWorkflow(workflowPath, {
+    tenantId: "omni-test-tenant",
+    seed: "workflow-repro-seed-1",
+    issueId: "ROCK-999"
+  });
 
   assert.equal(result.success, true);
   assert.equal(result.workflowName, "automated-bug-repro");

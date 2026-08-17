@@ -1,0 +1,14 @@
+name: order-settlement
+version: 1.0.0
+description: Automated cross-store settlement and payment confirmation workflow
+triggers:
+  - event: omnicommerce.order-events.OrderCreated
+steps:
+  - id: verify-inventory
+    action: mongodb.checkStock
+  - id: settle-payment
+    action: postgresql.recordSettlement
+  - id: emit-payment-cdc
+    action: kafka.producePaymentCdc
+  - id: notify-customer
+    action: agentmail.sendReceipt
